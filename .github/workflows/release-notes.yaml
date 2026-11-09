@@ -1,0 +1,70 @@
+---
+name: Release notes
+
+on:
+  push:
+    tags:
+      - "0.*"
+
+permissions:
+  contents: write
+
+jobs:
+  releaseNotes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # git-cliff --current picks the previous tag by date, which on a hotfix line can be a newer main release.
+      - name: Find the previous release
+        id: prev
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          prev=$(git describe --tags --abbrev=0 --match "0.*" "${TAG}^")
+          echo "tag=${prev}" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate the changelog
+        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff  # v4.9.1
+        with:
+          config: cliff.toml
+          args: --strip all "${PREV}..${TAG}"
+        env:
+          OUTPUT: notes.md
+          PREV: ${{ steps.prev.outputs.tag }}
+          TAG: ${{ github.ref_name }}
+
+      - name: Flag the deploy-risky paths
+        env:
+          PREV: ${{ steps.prev.outputs.tag }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          risk() {
+            local title=$1
+            shift
+            local commits
+            commits=$(git log --format="- %s" "${PREV}..${TAG}" -- "$@")
+            if [ -n "${commits}" ]; then
+              printf '\n**%s**\n\n%s\n' "${title}" "${commits}"
+            fi
+          }
+          {
+            echo
+            echo "### Deploy risk"
+            echo
+            echo "Commits since ${PREV} that touch paths needing a closer look before promoting."
+            risk "Terraform (Infra CD plans a change)" terraform/
+            risk "CRD schema" charts/crds/
+            risk "Pre-upgrade scripts" hack/pre-upgrade/ hack/pre-upgrade.sh
+            risk "stg / prd / pgov values" ":(glob)charts/*/values.stg.yaml" ":(glob)charts/*/values.prd*.yaml" ":(glob)charts/*/values.pgov.yaml"
+            echo
+            echo "**Full diff:** https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${TAG}"
+          } >> notes.md
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "${TAG}" --title "${TAG}" --notes-file notes.md --verify-tag

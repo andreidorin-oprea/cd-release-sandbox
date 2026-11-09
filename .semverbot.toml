@@ -1,0 +1,2 @@
+# Main predicts the next release line; hotfix tags on release/0.N bump the patch by hand.
+mode = "minor"

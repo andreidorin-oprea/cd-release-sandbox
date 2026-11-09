@@ -1,0 +1,46 @@
+# git-cliff configuration for the release notes on each tag's GitHub Release.
+# .github/workflows/release-notes.yaml runs it on every tag push; see CHANGELOG.md for a local preview.
+
+[changelog]
+header = ""
+body = """
+{% for group, commits in commits | filter(attribute="breaking", value=true) | group_by(attribute="breaking") -%}
+### ⚠️ Breaking changes
+{% for commit in commits -%}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.message | split(pat="\n") | first | upper_first }}
+{% endfor %}
+{% endfor -%}
+{% for group, commits in commits | group_by(attribute="group") -%}
+### {{ group | striptags | trim }}
+{% for commit in commits -%}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.message | split(pat="\n") | first | upper_first }}
+{% endfor %}
+{% endfor -%}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+# Dependency bumps from updatecli ("Bump image tags (#13355)") are not conventional; keep them under Other.
+filter_unconventional = false
+split_commits = false
+protect_breaking_commits = true
+filter_commits = false
+tag_pattern = "^0\\.[0-9]+\\.[0-9]+$"
+sort_commits = "oldest"
+commit_preprocessors = [
+  { pattern = "\\(#([0-9]+)\\)", replace = "([#${1}](https://github.com/andreidorin-oprea/cd-release-sandbox/pull/${1}))" },
+]
+# The HTML comments only order the sections; the template strips them.
+commit_parsers = [
+  { message = "^feat", group = "<!-- 0 -->Features" },
+  { message = "^fix", group = "<!-- 1 -->Bug fixes" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^refactor", group = "<!-- 3 -->Refactoring" },
+  { message = "^revert|^Revert", group = "<!-- 4 -->Reverts" },
+  { message = "^docs", group = "<!-- 5 -->Documentation" },
+  { message = "^test", group = "<!-- 6 -->Tests" },
+  { message = "^(build|ci|chore|infra)", group = "<!-- 7 -->Maintenance" },
+  { message = ".*", group = "<!-- 8 -->Other" },
+]

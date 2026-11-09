@@ -1,0 +1,75 @@
+---
+name: Cut tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "release tags main with 0.N.0, hotfix tags release/0.N with the next 0.N patch"
+        required: true
+        type: choice
+        options:
+          - release
+          - hotfix
+      commit:
+        description: "release: the main commit SHA to tag, main HEAD when empty"
+        required: false
+        type: string
+      base_tag:
+        description: "hotfix: the 0.N.P tag to fix"
+        required: false
+        type: string
+      shas:
+        description: "hotfix: space separated main commit SHAs to cherry-pick, in order"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: "cut-tag"
+  cancel-in-progress: false
+
+jobs:
+  cutTag:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: "go.mod"
+
+      # Sandbox stand-in for the bot token action.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510  # v3.3.0
+        id: generate-token
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      # A GITHUB_TOKEN push does not trigger release-notes.yaml, so origin pushes with the bot token.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Install sbot
+        if: inputs.mode == 'release'
+        run: make sbot
+
+      - name: Cut the tag
+        env:
+          MODE: ${{ inputs.mode }}
+          COMMIT: ${{ inputs.commit }}
+          BASE_TAG: ${{ inputs.base_tag }}
+          SHAS: ${{ inputs.shas }}
+          GIT_COMMITTER_NAME: ${{ vars.BOT_NAME }}
+          GIT_COMMITTER_EMAIL: ${{ vars.BOT_EMAIL }}
+        run: ./hack/cut-tag.sh --mode "${MODE}" --commit "${COMMIT}" --base-tag "${BASE_TAG}" --shas "${SHAS}"
