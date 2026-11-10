@@ -52,6 +52,7 @@ jobs:
           client-id: ${{ vars.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           permission-contents: write
+          permission-workflows: write
 
       # A GITHUB_TOKEN push does not trigger release-notes.yaml, so origin pushes with the bot token.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
