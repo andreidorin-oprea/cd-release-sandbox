@@ -1,2 +1,2 @@
-one (changed by A)
+one (changed by A, then fixed by B)
 two
